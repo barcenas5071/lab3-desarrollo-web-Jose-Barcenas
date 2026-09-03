@@ -1,0 +1,179 @@
+name: Evaluacion Automatica Lab 3 - HTML5 Semantico
+
+on: [push]
+
+jobs:
+  evaluacion-html:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 1. Descargar codigo del estudiante
+        uses: actions/checkout@v3
+
+      - name: 2. Configurar Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+
+      - name: 3. Instalar BeautifulSoup4
+        run: |
+          pip install beautifulsoup4
+
+      - name: 4. Evaluacion Inteligente de TODOs (100 PTS)
+        run: |
+          python -c '
+          import os, sys
+          from bs4 import BeautifulSoup
+
+          print("🔍 Analizando entregables de index.html...\n")
+
+          if not os.path.exists("index.html"):
+              print("❌ ERROR CRÍTICO: No se encontró el archivo index.html.")
+              sys.exit(1)
+
+          with open("index.html", "r", encoding="utf-8") as f:
+              soup = BeautifulSoup(f.read(), "html.parser")
+          
+          score = 0
+          report = []
+
+          # ------------------------------------------
+          # 1. METADATOS Y SCRIPTING (15 PTS)
+          # ------------------------------------------
+          p_meta = 0
+          meta_author = soup.find("meta", attrs={"name": lambda x: x and x.lower() == "author"})
+          meta_desc = soup.find("meta", attrs={"name": lambda x: x and x.lower() == "description"})
+          
+          author_text = meta_author.get("content", "").upper() if meta_author else ""
+          if meta_author and "TU NOMBRE" not in author_text and "CÉDULA" not in author_text and len(author_text) > 5:
+              p_meta += 4
+          else:
+              report.append("  ❌ [TODO 1] Debe reemplazar \"TU NOMBRE Y APELLIDO - CÉDULA\" por sus datos reales.")
+
+          if meta_desc and len(meta_desc.get("content", "")) > 5: p_meta += 3
+          if soup.find("script"): p_meta += 4
+          if soup.find("noscript"): p_meta += 4
+
+          score += p_meta
+          print(f"1. Metadatos y Scripting: {p_meta}/15 pts")
+
+          # ------------------------------------------
+          # 2. SECCIONES Y AGRUPACIÓN (25 PTS)
+          # ------------------------------------------
+          p_sec = 0
+          for tag in ["header", "nav", "main", "section", "article", "aside", "footer"]:
+              if soup.find(tag): p_sec += 2
+
+          # Validar TODO 2 (Cita personalizada)
+          bq = soup.find("blockquote")
+          cite = soup.find("cite")
+          default_quote = "La Web no es solo para consumir información"
+          
+          if bq and cite:
+              if default_quote in bq.text and "Tim Berners-Lee" in cite.text and len(soup.find_all("blockquote")) == 1:
+                  report.append("  ❌ [TODO 2] No ha personalizado la cita (aún conserva el texto por defecto de Tim Berners-Lee).")
+              else:
+                  p_sec += 11
+          else:
+              report.append("  ❌ [TODO 2] Falta la estructura <blockquote> con <cite>.")
+
+          score += p_sec
+          print(f"2. Secciones y Agrupación: {p_sec}/25 pts")
+
+          # ------------------------------------------
+          # 3. ESTRUCTURA DE TABLA (25 PTS)
+          # ------------------------------------------
+          p_tabla = 0
+          table = soup.find("table")
+          if table:
+              p_tabla += 3
+              if table.find("caption"): p_tabla += 4
+              if table.find("thead") and table.find("th"): p_tabla += 5
+              
+              tbody = table.find("tbody")
+              rows = tbody.find_all("tr") if tbody else []
+              
+              # Revisa si la tabla conserva exactamente el texto de la plantilla original
+              default_row_text = "Introducción y Arquitectura Web"
+              if len(rows) > 3 or (len(rows) >= 3 and not any(default_row_text in r.text for r in rows)):
+                  p_tabla += 8
+              else:
+                  report.append("  ❌ [TODO 3] Debe agregar nuevas filas de contenido a la tabla o personalizar las existentes (se detectaron solo las filas por defecto).")
+              
+              tfoot = table.find("tfoot")
+              if tfoot and tfoot.find(attrs={"colspan": True}): p_tabla += 5
+
+          score += p_tabla
+          print(f"3. Estructura de Tabla: {p_tabla}/25 pts")
+
+          # ------------------------------------------
+          # 4. SEMÁNTICA DE TEXTO (15 PTS)
+          # ------------------------------------------
+          p_texto = 0
+          for tag in ["mark", "code", "time", "small", "strong"]:
+              if soup.find(tag): p_texto += 3
+              else: report.append(f"  ⚠️ Falta etiqueta semántica: <{tag}>")
+
+          score += p_texto
+          print(f"4. Semántica de Texto: {p_texto}/15 pts")
+
+          # ------------------------------------------
+          # 5. CONTENIDO INCRUSTADO (20 PTS)
+          # ------------------------------------------
+          p_incrustado = 0
+          
+          # Validar TODO 4 (Imagen sin placeholder)
+          fig = soup.find("figure")
+          img = fig.find("img") if fig else None
+          cap = fig.find("figcaption") if fig else None
+          
+          if fig and img and cap and img.get("alt"):
+              if "via.placeholder.com" in img.get("src", ""):
+                  report.append("  ❌ [TODO 4] Debe reemplazar la imagen placeholder por defecto (via.placeholder.com) por una imagen o URL real.")
+              else:
+                  p_incrustado += 7
+          else:
+              report.append("  ❌ [TODO 4] Falta incluir la estructura <figure> con <img> y <figcaption>.")
+
+          # Validar TODO 5 (Audio/Video real)
+          media = soup.find("audio") or soup.find("video")
+          if media:
+              source = media.find("source")
+              src_val = source.get("src", "") if source else media.get("src", "")
+              if src_val == "audio-demo.mp3" or src_val == "":
+                  report.append("  ❌ [TODO 5] Debe reemplazar la ruta de prueba \"audio-demo.mp3\" por un archivo de audio o video real.")
+              else:
+                  p_incrustado += 6
+          else:
+              report.append("  ❌ [TODO 5] Falta agregar un reproductor de <audio> o <video>.")
+
+          # Validar TODO 6 (Iframe)
+          iframe = soup.find("iframe")
+          if iframe and iframe.get("src") and len(iframe.get("src")) > 10:
+              p_incrustado += 7
+          else:
+              report.append("  ❌ [TODO 6] Falta agregar un recurso incrustado con la etiqueta <iframe>.")
+
+          score += p_incrustado
+          print(f"5. Contenido Incrustado: {p_incrustado}/20 pts")
+
+          # ------------------------------------------
+          # RESULTADO FINAL
+          # ------------------------------------------
+          print("\n------------------------------------------")
+          print(f"📊 CALIFICACIÓN FINAL: {score} / 100 PTS")
+          print("------------------------------------------\n")
+
+          if report:
+              print("📌 Tareas pendientes por resolver:")
+              for msg in report:
+                  print(msg)
+              print("\n")
+
+          if score < 71:
+              print("❌ EVALUACIÓN FALLIDA: Puntuación menor a 71 pts.")
+              sys.exit(1)
+
+          print("🎉 ¡FELICITACIONES! Laboratorio aprobado exitosamente.")
+          sys.exit(0)
+          '
